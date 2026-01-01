@@ -4,6 +4,8 @@ from src.core.db.session import SessionLocal
 from scripts.instagram_fetch import fetch_profile
 from scripts.bio_extract import extract_contacts
 from src.core.logging_config import logger
+from datetime import datetime, timezone
+
 
 def seed_user(username: str):
     raw = fetch_profile(username)
@@ -22,9 +24,11 @@ def seed_user(username: str):
         following_count=raw["following"],
         posts_count=raw["posts"],
         is_verified=raw["is_verified"],
+        scraped_at=datetime.now(timezone.utc)
     )
+    
+    logger.info("User fetched: %r", user)
 
-    logger.info(f"User fetched: {user}")
 
     db.add(user)
     db.commit()

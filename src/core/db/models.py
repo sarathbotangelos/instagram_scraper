@@ -12,6 +12,7 @@ from datetime import datetime, UTC
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.core.db.base import Base
+from sqlalchemy import func
 
 
 
@@ -76,8 +77,9 @@ class User(Base):
         default=False,
     )
 
-    scraped_at: Mapped[int] = mapped_column(
-        Integer,
+    scraped_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
         nullable=False,
     )
 
@@ -85,15 +87,15 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(UTC),
+        server_default=func.now(),
     )
 
     # updated at with auto population
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(UTC),
-        onupdate=lambda: datetime.now(UTC),
+        server_default=func.now(),
+        onupdate=func.now(),
     )
 
     __table_args__ = (
@@ -129,9 +131,10 @@ class UserLink(Base):
         nullable=True,   # website | pinterest | whatsapp | email | other
     )
 
-    extracted_at: Mapped[int] = mapped_column(
-        Integer,
+    extracted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         nullable=False,
+        server_default=func.now(),
     )
 
     __table_args__ = (
@@ -160,8 +163,8 @@ class PostsMetadata(Base):
         nullable=False,
     )
 
-    posted_on: Mapped[int | None] = mapped_column(
-        Integer,
+    posted_on: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
         nullable=True,
     )
 
@@ -207,9 +210,10 @@ class PostsMetadata(Base):
         default="[]",   # JSON array of usernames
     )
 
-    scraped_at: Mapped[int] = mapped_column(
-        Integer,
+    scraped_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         nullable=False,
+        server_default=func.now(),
     )
 
     media_items: Mapped[list["PostMedia"]] = relationship(
@@ -274,9 +278,10 @@ class PostMedia(Base):
         default="[]",   # JSON array of usernames
     )
 
-    scraped_at: Mapped[int] = mapped_column(
-        Integer,
+    scraped_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         nullable=False,
+        server_default=func.now(),
     )
 
     post: Mapped["PostsMetadata"] = relationship(
