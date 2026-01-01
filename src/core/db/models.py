@@ -16,7 +16,7 @@ from src.core.db.base import Base
 
 
 class User(Base):
-    __tablename__ = "users_table"
+    __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(
         Integer,
@@ -224,7 +224,7 @@ class PostsMetadata(Base):
             name="ck_posts_content_kind",
         ),
         CheckConstraint(
-            "(content_kind = 'reel' AND is_container = 0) OR (content_kind = 'post')",
+            "(content_kind = 'reel' AND is_container = FALSE) OR (content_kind = 'post')",
             name="ck_posts_container_validity",
         ),
     )
