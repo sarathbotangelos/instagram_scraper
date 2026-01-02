@@ -5,6 +5,7 @@ from scripts.instagram_fetch import fetch_profile
 from scripts.bio_extract import extract_contacts
 from src.core.logging_config import logger
 from datetime import datetime, timezone
+from src.core.cache import FileCache
 
 
 def seed_user(username: str):
@@ -33,23 +34,13 @@ def seed_user(username: str):
     db.add(user)
     db.commit()
     db.refresh(user)
+    
+    # Cache the username for later use
+    FileCache.set("last_seeded_username", user.username)
+    logger.info("Username %s cached in temporary store.", user.username)
+
     db.close()
 
     return user
 
 
-def main():
-    import sys
-
-    if len(sys.argv) != 2:
-        raise SystemExit("usage: python -m scripts.seed_user <instagram_username>")
-
-    username = sys.argv[1]
-    logger.info("Starting seed for username=%s", username)
-
-    user = seed_user(username)
-    logger.info("Seed completed for username=%s", user.username)
-
-
-if __name__ == "__main__":
-    main()
