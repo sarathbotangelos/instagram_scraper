@@ -49,3 +49,6 @@ sys_logs/
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# Temporary cache
+temp_cache.json

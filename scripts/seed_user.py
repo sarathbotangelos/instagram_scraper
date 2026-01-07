@@ -14,33 +14,45 @@ def seed_user(username: str):
 
     db: Session = SessionLocal()
 
-    user = User(
-        username=raw["username"],
-        display_name=raw["full_name"],
-        bio_text=extracted["bio"],
-        email=extracted["email"],
-        profile_url=f"https://www.instagram.com/{raw['username']}/",
-        phone_number=extracted["phone"],
-        followers_count=raw["followers"],
-        following_count=raw["following"],
-        posts_count=raw["posts"],
-        is_verified=raw["is_verified"],
-        scraped_at=datetime.now(timezone.utc)
-    )
+    # 1. UPSERT logic: Check if user exists, else create
+    user = db.query(User).filter(User.username == raw["username"]).first()
     
-    logger.info("User fetched: %r", user)
-
-
-    db.add(user)
+    if user:
+        logger.info("User %s already exists. Updating record...", user.username)
+        user.display_name = raw["full_name"]
+        user.bio_text = extracted["bio"]
+        user.email = extracted["email"]
+        user.phone_number = extracted["phone"]
+        user.followers_count = raw["followers"]
+        user.following_count = raw["following"]
+        user.posts_count = raw["posts"]
+        user.is_verified = raw["is_verified"]
+        user.scraped_at = datetime.now(timezone.utc)
+    else:
+        logger.info("Creating new user record for %s...", raw["username"])
+        user = User(
+            username=raw["username"],
+            display_name=raw["full_name"],
+            bio_text=extracted["bio"],
+            email=extracted["email"],
+            profile_url=f"https://www.instagram.com/{raw['username']}/",
+            phone_number=extracted["phone"],
+            followers_count=raw["followers"],
+            following_count=raw["following"],
+            posts_count=raw["posts"],
+            is_verified=raw["is_verified"],
+            scraped_at=datetime.now(timezone.utc)
+        )
+        db.add(user)
+    
     db.commit()
     db.refresh(user)
     
-    # Cache the username for later use
+    # Cache the username and their specific post count for later use
     FileCache.set("last_seeded_username", user.username)
-    logger.info("Username %s cached in temporary store.", user.username)
+    FileCache.set(f"{user.username}_posts_count", user.posts_count)
+    logger.info("User %s (posts: %s) cached in temporary store.", user.username, user.posts_count)
 
     db.close()
 
     return user
-
-
