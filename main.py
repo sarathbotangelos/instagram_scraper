@@ -21,14 +21,11 @@ def main():
     cached_username = FileCache.get("last_seeded_username")
     
     if cached_username:
-        # Retrieve the specific post count for this user
-        cached_posts_count = FileCache.get(f"{cached_username}_posts_count") or 12
-        
         logger.info("Retrieved username from cache: %s. Starting link processing...", cached_username)
         process_user_links(cached_username)
         
-        logger.info("Starting post seeding for %s (count=%s)...", cached_username, cached_posts_count)
-        seed_posts(cached_username, count=cached_posts_count)
+        logger.info("Starting post seeding for %s...", cached_username)
+        seed_posts(cached_username)
     else:
         logger.warning("No username found in cache. Skipping link processing.")
 

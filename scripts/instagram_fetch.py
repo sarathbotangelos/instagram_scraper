@@ -1,18 +1,14 @@
 import instaloader
+from src.core.instagram_loader import get_loader
+
+def get_profile(username: str):
+    L = get_loader()
+    return instaloader.Profile.from_username(L.context, username)
+
 
 def fetch_profile(username: str):
-    L = instaloader.Instaloader(
-        download_pictures=False,
-        download_videos=False,
-        download_video_thumbnails=False,
-        save_metadata=False,
-        compress_json=False,
-    )
 
-    # OPTIONAL: reuse logged-in session
-    # L.load_session_from_file("your_login_username")
-
-    profile = instaloader.Profile.from_username(L.context, username)
+    profile = get_profile(username)
 
     return {
         "username": profile.username,
@@ -27,15 +23,7 @@ def fetch_profile(username: str):
     }
 
 def fetch_posts(username: str, count: int = 12):
-    L = instaloader.Instaloader(
-        download_pictures=False,
-        download_videos=False,
-        download_video_thumbnails=False,
-        save_metadata=False,
-        compress_json=False,
-    )
-    
-    profile = instaloader.Profile.from_username(L.context, username)
+    profile = get_profile(username)
     posts = []
     
     for i, post in enumerate(profile.get_posts()):
