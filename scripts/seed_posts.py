@@ -9,7 +9,7 @@ from scripts.instagram_fetch import get_profile
 from src.core.logging_config import logger
 
 
-CHUNK_SIZE = 10
+CHUNK_SIZE = 100
 SLEEP_SECONDS = 120  # 2 minutes
 
 

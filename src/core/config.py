@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     DATABASE_PORT: int
     DATABASE_NAME: str
 
+    # Apify
+    APIFY_API_TOKEN: str
+    APIFY_INSTAGRAM_ACTOR: str = "apify/instagram-hashtag-scraper"
+    APIFY_BASE_URL: str = "https://api.apify.com/v2"
+
     # Logging
     LOG_LEVEL: str = "INFO"
     LOG_FILE: str = "sys_logs/app.log"
