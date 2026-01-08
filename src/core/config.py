@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     APIFY_INSTAGRAM_ACTOR: str = "apify/instagram-hashtag-scraper"
     APIFY_BASE_URL: str = "https://api.apify.com/v2"
 
+    # DeepSeek / OpenRouter
+    DEEPSEEK_API_KEY: str
+    DEEPSEEK_BASE_URL: str = "https://openrouter.ai/api/v1"
+    DEEPSEEK_MODEL: str = "deepseek/deepseek-r1-0528:free"
+
     # Logging
     LOG_LEVEL: str = "INFO"
     LOG_FILE: str = "sys_logs/app.log"

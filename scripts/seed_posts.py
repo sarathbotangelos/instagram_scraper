@@ -9,8 +9,8 @@ from scripts.instagram_fetch import get_profile
 from src.core.logging_config import logger
 
 
-CHUNK_SIZE = 100
-SLEEP_SECONDS = 120  # 2 minutes
+CHUNK_SIZE = 10
+SLEEP_SECONDS = 180  # 3 minutes
 
 
 def seed_posts(username: str):
