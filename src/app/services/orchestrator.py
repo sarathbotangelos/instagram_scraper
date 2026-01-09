@@ -11,8 +11,8 @@ logger = logging.getLogger(__name__)
 
 def run_discovery(prompt: str, db: Session) -> None:
     """
-    Entry point for discovery.
-    Orchestrates prompt → queries → usernames → PROFILE jobs.
+    Discovery = query generation + Google search + URL enqueue.
+    No Instagram fetch. No username parsing.
     """
 
     logger.info("Discovery started for prompt: %s", prompt)
@@ -22,22 +22,28 @@ def run_discovery(prompt: str, db: Session) -> None:
         logger.warning("No queries generated from prompt")
         return
 
-    usernames = discover_usernames_from_queries(queries)
+    discovered_urls: set[str] = set()
 
-    if not usernames:
-        logger.info("No usernames discovered")
+    for query in queries:
+        urls = google_search_instagram_posts(query, limit=20)
+        for url in urls:
+            # keep only posts/reels
+            if "/p/" in url or "/reel/" in url:
+                discovered_urls.add(url.split("?")[0])
+
+    if not discovered_urls:
+        logger.info("No post URLs discovered")
         return
 
-    logger.info(f"Usernames are {usernames}")
-
-    # enqueue_profile_jobs(
-    #     usernames=usernames,
+    # enqueue_post_jobs(
+    #     urls=discovered_urls,
     #     source=ScrapeJobSource.GOOGLE,
     #     db=db,
     # )
 
-    logger.info("Discovery finished. PROFILE jobs enqueued: %d", len(usernames))
+    logger.info("Discovered URLs: %s", discovered_urls)
 
+    logger.info("Discovery finished. POST jobs enqueued: %d", len(discovered_urls))
 
 
 def discover_usernames_from_queries(queries: list[str]) -> set[str]:
