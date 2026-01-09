@@ -11,8 +11,102 @@ from sqlalchemy import (
 from datetime import datetime, UTC
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from src.core.db.base import Base
+from src.app.core.db.base import Base
 from sqlalchemy import func
+import enum
+from sqlalchemy import Enum as SAEnum
+
+
+
+
+class ScrapeJobType(enum.Enum):
+    PROFILE = 1
+    POST = 2
+
+class ScrapeJobSource(enum.Enum):
+    GOOGLE = 1
+    FOLLOWUP = 2
+    MANUAL = 3
+
+
+class ScrapeJobStatus(enum.Enum):
+    PENDING = 1        # never run
+    RUNNING = 2        # claimed by worker
+    DONE = 3           # successful
+    RATE_LIMITED = 4   # 401 / 403
+    FAILED = 5         # transient failure
+    DEAD = 6           # permanent failure (404, deleted)
+
+
+
+class ScrapeJob(Base):
+    __tablename__ = "scrape_jobs"
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        autoincrement=True,
+    )
+
+    job_type: Mapped[ScrapeJobType] = mapped_column(
+        SAEnum(ScrapeJobType, name="scrapejobtype"),
+        nullable=False,
+    )
+
+    entity_key: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+
+    source: Mapped[ScrapeJobSource] = mapped_column(
+        SAEnum(ScrapeJobSource, name="scrapejobsource"),
+        nullable=False,
+    )
+
+    status: Mapped[ScrapeJobStatus] = mapped_column(
+        SAEnum(ScrapeJobStatus, name="scrapejobstatus"),
+        nullable=False,
+        default=ScrapeJobStatus.PENDING,
+        server_default="PENDING",
+    )
+
+    attempts: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    retry_after: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    last_error: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "job_type",
+            "entity_key",
+            name="uq_scrape_jobs_job_type_entity_key",
+        ),
+    )
 
 
 
@@ -299,4 +393,5 @@ class PostMedia(Base):
             name="uq_post_media_index",
         ),
     )
+
 

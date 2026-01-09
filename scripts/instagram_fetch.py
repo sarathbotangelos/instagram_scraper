@@ -1,5 +1,5 @@
 import instaloader
-from src.core.instagram_loader import get_loader
+from src.app.core.instagram_loader import get_loader
 
 def get_profile(username: str):
     L = get_loader()

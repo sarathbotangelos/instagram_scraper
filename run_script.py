@@ -4,8 +4,8 @@ from scripts.seed_posts import seed_posts
 from scripts.link_scraper import process_user_links
 from scripts.discover_accounts import discover_users_by_hashtags, seed_discovered_users
 from scripts.llm_utils import generate_hashtags
-from src.core.cache import FileCache
-from src.core.logging_config import logger
+from src.app.core.cache import FileCache
+from src.app.core.logging_config import logger
 
 def main():
     if len(sys.argv) < 2:

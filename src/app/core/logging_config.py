@@ -2,7 +2,7 @@ import logging
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from src.core.config import settings
+from src.app.core.config import settings
 
 def setup_logging():
     # Ensure logs directory exists

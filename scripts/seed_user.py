@@ -1,11 +1,11 @@
 from sqlalchemy.orm import Session
-from src.core.db.models import User
-from src.core.db.session import SessionLocal
+from src.app.core.db.models import User
+from src.app.core.db.session import SessionLocal
 from scripts.instagram_fetch import fetch_profile
 from scripts.bio_extract import extract_contacts
-from src.core.logging_config import logger
+from src.app.core.logging_config import logger
 from datetime import datetime, timezone
-from src.core.cache import FileCache
+from src.app.core.cache import FileCache
 
 
 def seed_user(username: str):

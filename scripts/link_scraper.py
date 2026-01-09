@@ -4,9 +4,9 @@ from urllib.parse import urlparse
 import re
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
-from src.core.db.models import User, UserLink
-from src.core.db.session import SessionLocal
-from src.core.logging_config import logger
+from src.app.core.db.models import User, UserLink
+from src.app.core.db.session import SessionLocal
+from src.app.core.logging_config import logger
 
 AGGREGATOR_DOMAINS = [
     "linktr.ee",

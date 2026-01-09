@@ -5,8 +5,8 @@ from pathlib import Path
 # Add project root to path so imports work
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from src.core.logging_config import logger
-from src.core.config import settings
+from src.app.core.logging_config import logger
+from src.app.core.config import settings
 
 def test_logger():
     print("--- Testing Logger (from scripts folder) ---")

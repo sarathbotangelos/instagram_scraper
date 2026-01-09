@@ -1,7 +1,7 @@
 import sys
 from apify_client import ApifyClient
-from src.core.config import settings
-from src.core.logging_config import logger
+from src.app.core.config import settings
+from src.app.core.logging_config import logger
 from scripts.seed_user import seed_user
 from scripts.seed_posts import seed_posts
 from scripts.link_scraper import process_user_links

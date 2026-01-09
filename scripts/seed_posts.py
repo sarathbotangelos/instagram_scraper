@@ -3,10 +3,10 @@ import time
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
-from src.core.db.models import User, PostsMetadata, PostMedia
-from src.core.db.session import SessionLocal
+from src.app.core.db.models import User, PostsMetadata, PostMedia
+from src.app.core.db.session import SessionLocal
 from scripts.instagram_fetch import get_profile
-from src.core.logging_config import logger
+from src.app.core.logging_config import logger
 
 
 CHUNK_SIZE = 10
