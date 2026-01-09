@@ -1,7 +1,7 @@
 from fastapi import APIRouter, BackgroundTasks, Depends
 from sqlalchemy.orm import Session
 from src.app.core.db.session import get_db
-from src.app.services.discovery_service import run_discovery
+from src.app.services.orchestrator import run_discovery
 
 router = APIRouter()
 

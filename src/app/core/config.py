@@ -22,6 +22,17 @@ class Settings(BaseSettings):
     DEEPSEEK_BASE_URL: str = "https://openrouter.ai/api/v1"
     DEEPSEEK_MODEL: str = "deepseek/deepseek-r1-0528:free"
 
+    # Google
+    GOOGLE_API_KEY : str
+    GOOGLE_CSE_ID : str
+
+    # User Agent
+    USER_AGENT: str = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
+    )
+
     # Logging
     LOG_LEVEL: str = "INFO"
     LOG_FILE: str = "sys_logs/app.log"
