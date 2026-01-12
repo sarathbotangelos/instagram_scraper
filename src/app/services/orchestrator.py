@@ -2,8 +2,8 @@ from sqlalchemy.orm import Session
 from src.app.services.llm import generate_search_queries
 from src.app.services.google_search import google_search_instagram_posts
 from src.app.services.extractors import extract_username_from_post
-# from src.app.jobs.enqueue import enqueue_profile_jobs
-# from src.app.jobs.enums import ScrapeJobSource
+from src.app.jobs.enqueue import enqueue_post_jobs
+from src.app.core.db.models import ScrapeJobSource
 import logging
 
 logger = logging.getLogger(__name__)
@@ -35,11 +35,11 @@ def run_discovery(prompt: str, db: Session) -> None:
         logger.info("No post URLs discovered")
         return
 
-    # enqueue_post_jobs(
-    #     urls=discovered_urls,
-    #     source=ScrapeJobSource.GOOGLE,
-    #     db=db,
-    # )
+    enqueue_post_jobs(
+        urls=discovered_urls,
+        source=ScrapeJobSource.GOOGLE,
+        db=db,
+    )
 
     logger.info("Discovered URLs: %s", discovered_urls)
 
