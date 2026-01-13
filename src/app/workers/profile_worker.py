@@ -82,74 +82,65 @@ from src.app.core.logging_config import logger
 
 # new code 
 
+
+import requests
+
+def fetch_profile_webinfo(L, username: str) -> dict:
+    session = L.context._session  # reuse authenticated cookies
+
+    headers = {
+        "User-Agent": L.context.user_agent,
+        "X-IG-App-ID": "936619743392459",
+        "Accept": "application/json",
+        "Referer": f"https://www.instagram.com/{username}/",
+    }
+
+    resp = session.get(
+        "https://www.instagram.com/api/v1/users/web_profile_info/",
+        params={"username": username},
+        headers=headers,
+        timeout=15,
+    )
+
+    resp.raise_for_status()
+    return resp.json()["data"]["user"]
+
+
 def process_profile_job(
     job: ScrapeJob,
     db: Session,
     L: instaloader.Instaloader,
-    max_posts: int = 12,
 ) -> None:
     username = job.entity_key
-
-    # HARD THROTTLE — TEMPORARY
-    # time.sleep(random.uniform(60, 90))
-
-    print(f"trying to seed a user {username}")
-
-
-    # Load profile (AUTHENTICATED)
-    profile = instaloader.Profile.from_username(L.context, username)
-
-    # construct profile url 
     profile_url = f"https://www.instagram.com/{username}"
 
-    # Update user enrichment
+    logger.info("Seeding profile %s", username)
+
     try:
+        data = fetch_profile_webinfo(L, username)
+
         user = db.query(User).filter_by(username=username).first()
         if not user:
-            logger.info("User %s not found, creating new record", username)
             user = User(username=username, profile_url=profile_url)
             db.add(user)
             db.flush()
 
-        user.display_name = profile.full_name
-        user.bio_text = profile.biography
-        user.followers_count = profile.followers
-        user.following_count = profile.followees
-        user.posts_count = profile.mediacount
-        user.is_verified = profile.is_verified
+        user.display_name = data.get("full_name")
+        user.bio_text = data.get("biography")
+        user.followers_count = data["edge_followed_by"]["count"]
+        user.following_count = data["edge_follow"]["count"]
+        user.posts_count = data["edge_owner_to_timeline_media"]["count"]
+        user.is_verified = data.get("is_verified", False)
+        user.is_private = data.get("is_private", False)
         user.profile_url = profile_url
 
         db.commit()
-        logger.info("Successfully updated/created user %s", username)
+        logger.info("Profile %s enriched", username)
+
     except Exception as e:
         db.rollback()
-        logger.error("Failed to update/create user %s: %s", username, e)
+        logger.error("Profile enrichment failed for %s: %s", username, e)
         raise
-
-    # Extract bio links
-    # if profile.external_url:
-    #     try:
-    #         db.add(
-    #             UserLink(
-    #                 user_id=user.id,
-    #                 url=profile.external_url,
-    #                 link_type="website",
-    #             )
-    #         )
-    #     except IntegrityError:
-    #         db.rollback()
-
-    # Enumerate recent posts
-    post_urls = get_recent_post_urls(
-        L,
-        username=username,
-        max_posts=user.posts_count,
-    )
-
-    # log each of the post urls
-    for post_url in post_urls:
-        logger.info("Recent post URL: %s", post_url)
-
 
 
 
