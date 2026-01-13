@@ -9,6 +9,7 @@ import instaloader
 from src.app.core.db.session import SessionLocal
 from src.app.core.config import settings
 from src.app.core.db.models import ScrapeJob,ScrapeJobStatus, ScrapeJobType
+from src.app.workers.post_worker import enqueue_profile_job
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -75,6 +76,9 @@ def run_worker():
                 job.id,
                 username,
             )
+
+            if username:
+                enqueue_profile_job(username, db)
 
             # mark DONE
             job.status = ScrapeJobStatus.DONE
