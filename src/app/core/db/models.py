@@ -30,13 +30,17 @@ class ScrapeJobSource(enum.Enum):
 
 
 class ScrapeJobStatus(enum.Enum):
-    PENDING = 1        # never run
-    RUNNING = 2        # claimed by worker
-    DONE = 3           # successful
-    RATE_LIMITED = 4   # 401 / 403
-    FAILED = 5         # transient failure
-    DEAD = 6           # permanent failure (404, deleted)
-
+    PENDING = 1
+    USER_SEED_RUNNING = 2
+    USER_SEEDED = 3
+    USER_SEEDED_FAILED = 4
+    POSTS_SEED_RUNNING = 5
+    POSTS_SEEDED = 6
+    POSTS_SEEDED_FAILED = 7
+    SCRAPE_DONE = 8
+    RATE_LIMITED = 9
+    FAILED = 10
+    DEAD = 11
 
 
 class ScrapeJob(Base):

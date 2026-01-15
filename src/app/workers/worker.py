@@ -93,8 +93,8 @@ def run_worker():
             if username:
                 enqueue_profile_job(username, db)
 
-            # mark DONE
-            job.status = ScrapeJobStatus.DONE
+            # mark USER_SEEDED
+            job.status = ScrapeJobStatus.USER_SEEDED
             db.commit()
 
             start_post += 1
@@ -103,7 +103,7 @@ def run_worker():
             db.rollback()
 
             if job:
-                job.status = ScrapeJobStatus.FAILED
+                job.status = ScrapeJobStatus.USER_SEEDED_FAILED
                 job.last_error = str(e)
                 db.commit()
 

@@ -1,12 +1,13 @@
 
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-from src.app.core.db.models import User, UserLink
+from src.app.core.db.models import User
 from src.app.core.db.models import ScrapeJob, ScrapeJobStatus, ScrapeJobType, ScrapeJobSource
-from src.app.workers.instagram_client import get_recent_post_urls
 from src.app.core.logging_config import logger
 import requests
 from src.app.instagram.client import build_authenticated_session
+from src.app.services.seeding_service import extract_contacts, process_user_links
+
 
 def fetch_profile_webinfo(session: requests.Session, username: str) -> dict:
     resp = session.get(
@@ -32,49 +33,49 @@ def process_profile_job(
     job: ScrapeJob,
     db: Session,
 ) -> None:
-
     username = job.entity_key
     profile_url = f"https://www.instagram.com/{username}"
 
     logger.info("Seeding profile %s", username)
 
     session = build_authenticated_session()
-
     data = fetch_profile_webinfo(session, username)
 
     user = db.query(User).filter_by(username=username).first()
     if not user:
         user = User(username=username, profile_url=profile_url)
         db.add(user)
-        db.flush()
+        db.flush()  # ensures user.id exists
 
     user.display_name = data.get("full_name")
-    user.bio_text = data.get("biography")
+
+    bio_text = data.get("biography", "")
+    extracted = extract_contacts(bio_text)
+
+    user.bio_text = extracted["bio"]
+    user.email = extracted["email"]
+    user.phone_number = extracted["phone"]
+
     user.followers_count = data["edge_followed_by"]["count"]
     user.following_count = data["edge_follow"]["count"]
     user.posts_count = data["edge_owner_to_timeline_media"]["count"]
     user.is_verified = data.get("is_verified", False)
-    user.is_private = data.get("is_private", False)
     user.profile_url = profile_url
 
+    # persist profile state first
     db.commit()
 
+    # enrichment phase: must never fail the profile job
+    try:
+        process_user_links(username, db)
+    except Exception as e:
+        logger.warning(
+            "Aggregator expansion failed for username=%s: %s",
+            username,
+            e,
+        )
 
 
-    # Enqueue POST jobs
-    # for post_url in post_urls:
-    #     try:
-    #         db.add(
-    #             ScrapeJob(
-    #                 job_type=ScrapeJobType.POST,
-    #                 entity_key=post_url,
-    #                 source=ScrapeJobSource.FOLLOWUP,
-    #                 status=ScrapeJobStatus.PENDING,
-    #             )
-    #         )
-    #         db.commit()
-    #     except IntegrityError:
-    #         db.rollback()
 
 
 if __name__ == "__main__":
@@ -104,6 +105,7 @@ if __name__ == "__main__":
 
         try:
             process_profile_job(job, db)
+
             job.status = ScrapeJobStatus.DONE
             db.commit()
 
