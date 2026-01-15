@@ -26,10 +26,6 @@ class Settings(BaseSettings):
     GOOGLE_API_KEY : str
     GOOGLE_CSE_ID : str
 
-    # Instagram
-    IG_USERNAME : str
-    IG_PASSWORD : str
-
     # User Agent
     USER_AGENT: str = (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
