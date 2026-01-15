@@ -17,6 +17,13 @@ logger = logging.getLogger(__name__)
 POLL_INTERVAL = 5  # seconds
 
 
+L = instaloader.Instaloader(
+    download_pictures=False,
+    download_videos=False,
+    download_video_thumbnails=False,
+    download_comments=False,
+    save_metadata=False,
+)
 
 def fetch_next_job(db: Session) -> ScrapeJob | None:
     return (
@@ -31,14 +38,6 @@ def fetch_next_job(db: Session) -> ScrapeJob | None:
     )
 
 
-L = instaloader.Instaloader(
-    download_pictures=False,
-    download_videos=False,
-    download_video_thumbnails=False,
-    download_comments=False,
-    save_metadata=False,
-)
-
 def extract_username_from_post(post_url: str) -> str | None:
     shortcode = post_url.rstrip("/").split("/")[-1]
 
@@ -50,8 +49,22 @@ def extract_username_from_post(post_url: str) -> str | None:
 def run_worker():
     logger.info("Worker started")
 
-    while True:
-        db = SessionLocal()
+    # get the number of pending posts 
+    db = SessionLocal()
+    pending_posts_count = (
+        db.query(ScrapeJob)
+        .filter(
+            ScrapeJob.status == ScrapeJobStatus.PENDING,
+            ScrapeJob.job_type == ScrapeJobType.POST,
+        )
+        .count()
+    )
+    
+    logger.info("Pending posts count: %d", pending_posts_count)
+
+    start_post = 1
+
+    while start_post <= pending_posts_count:
         job: ScrapeJob | None = None
 
         try:
@@ -84,6 +97,8 @@ def run_worker():
             job.status = ScrapeJobStatus.DONE
             db.commit()
 
+            start_post += 1
+
         except Exception as e:
             db.rollback()
 
@@ -93,10 +108,11 @@ def run_worker():
                 db.commit()
 
             logger.exception("Worker error")
-
+            start_post += 1
         finally:
             db.close()
 
+    logger.info("Worker finished")
 
 if __name__ == "__main__":
     run_worker()
