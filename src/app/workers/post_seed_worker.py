@@ -387,8 +387,22 @@ def run_worker():
         db.close()
         return
 
-    # 2. Load users to process
-    users = db.query(User).all()
+    # # 2. Load users to process
+    # users = db.query(User).all()
+
+
+    # Load the records in scrape_jobs where job_type=PROFILE and status=USER_SEEDED
+    users = (
+        db.query(User)
+        .join(
+            ScrapeJob,
+            (ScrapeJob.entity_key == User.username) &
+            (ScrapeJob.job_type == ScrapeJobType.PROFILE) &
+            (ScrapeJob.status == ScrapeJobStatus.USER_SEEDED)
+        )
+        .all()
+    )
+
     logger.info(f"Found {len(users)} users in DB to process.")
 
     for i, user in enumerate(users):
