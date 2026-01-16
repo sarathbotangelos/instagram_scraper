@@ -228,7 +228,7 @@ class UserLink(Base):
     )
 
     link_type: Mapped[str | None] = mapped_column(
-        String(100),
+        Text,
         nullable=True,   # website | pinterest | whatsapp | email | other
     )
 
@@ -255,7 +255,7 @@ class PostsMetadata(Base):
     __tablename__ = "posts_metadata"
 
     shortcode: Mapped[str] = mapped_column(
-        String(32),
+        Text,
         primary_key=True,
     )
 
@@ -296,7 +296,7 @@ class PostsMetadata(Base):
     )
 
     content_kind: Mapped[str] = mapped_column(
-        String(16),
+        Text,
         nullable=False,
     )
 
@@ -345,7 +345,7 @@ class PostMedia(Base):
     )
 
     post_shortcode: Mapped[str] = mapped_column(
-        String(32),
+        Text,
         ForeignKey(
             "posts_metadata.shortcode",
             ondelete="CASCADE",
@@ -359,7 +359,7 @@ class PostMedia(Base):
     )
 
     media_type: Mapped[str] = mapped_column(
-        String(16),
+        Text,
         nullable=False,
     )
 

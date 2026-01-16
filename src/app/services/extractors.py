@@ -153,3 +153,74 @@ def process_user_links(username: str, db: Session):
                 )
                 db.add(new_link)
     db.commit()
+
+
+
+
+def extract_tagged_users(media: dict) -> list[str]:
+    """
+    Extract tagged usernames from a media item.
+    """
+    usernames = set()
+    tags = media.get("usertags", {}).get("in", [])
+    for t in tags:
+        user = t.get("user")
+        if user and user.get("username"):
+            usernames.add(user["username"])
+    return list(usernames)
+
+
+
+def extract_media_items(item: dict) -> list[dict]:
+    """
+    Normalize post media (single or carousel) into a flat list.
+    Each entry contains: url, type, subtype, index, tagged_users
+    """
+    media_items = []
+
+    def pick_best_image(media):
+        candidates = media.get("image_versions2", {}).get("candidates", [])
+        return candidates[0]["url"] if candidates else None
+
+    def pick_best_video(media):
+        versions = media.get("video_versions", [])
+        return versions[0]["url"] if versions else None
+
+    # Carousel
+    if item.get("media_type") == 8:
+        for idx, media in enumerate(item.get("carousel_media", [])):
+            media_type = "video" if media.get("media_type") == 2 else "image"
+            url = (
+                pick_best_video(media)
+                if media_type == "video"
+                else pick_best_image(media)
+            )
+            if not url:
+                continue
+
+            media_items.append({
+                "media_url": url,
+                "media_type": media_type,
+                "media_subtype": media.get("media_type"),
+                "media_index": idx,
+                "tagged_users": extract_tagged_users(media),
+            })
+
+    # Single media
+    else:
+        media_type = "video" if item.get("media_type") == 2 else "image"
+        url = (
+            pick_best_video(item)
+            if media_type == "video"
+            else pick_best_image(item)
+        )
+        if url:
+            media_items.append({
+                "media_url": url,
+                "media_type": media_type,
+                "media_subtype": item.get("media_type"),
+                "media_index": 0,
+                "tagged_users": extract_tagged_users(item),
+            })
+
+    return media_items

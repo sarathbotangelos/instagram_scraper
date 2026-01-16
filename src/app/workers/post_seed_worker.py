@@ -9,11 +9,11 @@ from typing import Optional, Dict, Any, Tuple
 
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-from src.app.core.db.models import User, PostsMetadata
+from src.app.core.db.models import User, PostsMetadata, ScrapeJob, ScrapeJobType, ScrapeJobStatus,PostMedia
 from src.app.core.db.session import SessionLocal
 from src.app.core.logging_config import logger
 from src.app.instagram.client import build_authenticated_session
-from src.app.services.extractors import extract_collaborators
+from src.app.services.extractors import extract_collaborators, extract_media_items
 
 # Constants
 # We will use this module-level logger which is configured in logging_config
@@ -219,6 +219,9 @@ def parse_and_persist_items(db: Session, user_db_id: int, items: list) -> int:
 
             # Extract collaborators
             collaborators_extracted = extract_collaborators(item)
+
+            # Extract media items
+            media_items = extract_media_items(item)
             
             # Check existing
             post = db.query(PostsMetadata).filter_by(shortcode=shortcode).first()
@@ -245,6 +248,34 @@ def parse_and_persist_items(db: Session, user_db_id: int, items: list) -> int:
                 
             # If we wanted to parse media items (slides/URLs), we would do it here using PostMedia table.
             # For now, focusing on Metadata as per initial requirement/snippet.
+
+            for media in media_items:
+                existing_media = (
+                    db.query(PostMedia)
+                    .filter_by(
+                        post_shortcode=shortcode,
+                        media_index=media["media_index"],
+                    )
+                    .first()
+                )
+
+                if not existing_media:
+                    existing_media = PostMedia(
+                        post_shortcode=shortcode,
+                        media_url=media["media_url"],
+                        media_type=media["media_type"],
+                        media_subtype=media["media_subtype"],
+                        media_index=media["media_index"],
+                        tagged_users=json.dumps(media["tagged_users"]),
+                        scraped_at=datetime.now(UTC),
+                    )
+                    db.add(existing_media)
+                else:
+                    # update mutable fields on re-scrape
+                    existing_media.media_url = media["media_url"]
+                    existing_media.media_type = media["media_type"]
+                    existing_media.media_subtype = media["media_subtype"]
+                    existing_media.tagged_users = json.dumps(media["tagged_users"])
             
         except Exception as e:
             logger.error(f"Error parsing item {item.get('code', 'unknown')}: {e}")
@@ -256,20 +287,48 @@ def parse_and_persist_items(db: Session, user_db_id: int, items: list) -> int:
 def seed_posts_for_user(db: Session, session: requests.Session, username: str):
     logger.info(f"=== Seeding posts for {username} ===")
     
+    # Get the related ScrapeJob for this user
+    scrape_job = (
+        db.query(ScrapeJob)
+        .filter(
+            ScrapeJob.job_type == ScrapeJobType.PROFILE,
+            ScrapeJob.entity_key == username
+        )
+        .first()
+    )
+    
+    # Update job status to POSTS_SEED_RUNNING
+    if scrape_job:
+        scrape_job.status = ScrapeJobStatus.POSTS_SEED_RUNNING
+        db.commit()
+        logger.info(f"Updated job {scrape_job.id} to POSTS_SEED_RUNNING")
+    
     # Resolve IG PK
     profile_id, status = resolve_profile_id(session, username)
     if status == "session_dead":
         logger.critical("Session appears dead. Stopping worker.")
+        if scrape_job:
+            scrape_job.status = ScrapeJobStatus.POSTS_SEEDED_FAILED
+            scrape_job.last_error = "Session dead during profile ID resolution"
+            db.commit()
         raise RuntimeError("Session Dead")
     
     if not profile_id:
         logger.error(f"Could not resolve profile ID for {username}. Skipping.")
+        if scrape_job:
+            scrape_job.status = ScrapeJobStatus.POSTS_SEEDED_FAILED
+            scrape_job.last_error = "Could not resolve profile ID"
+            db.commit()
         return
 
     # Get DB user
     user_db = db.query(User).filter_by(username=username).first()
     if not user_db:
         logger.error(f"User {username} not in DB. Skipping.")
+        if scrape_job:
+            scrape_job.status = ScrapeJobStatus.POSTS_SEEDED_FAILED
+            scrape_job.last_error = f"User {username} not found in database"
+            db.commit()
         return
 
     # Pagination
@@ -282,7 +341,11 @@ def seed_posts_for_user(db: Session, session: requests.Session, username: str):
         page_data, status = fetch_posts_page(session, profile_id, cursor)
         
         if status == "session_dead":
-            logger.critical("Session died during pagination user={username}")
+            logger.critical(f"Session died during pagination user={username}")
+            if scrape_job:
+                scrape_job.status = ScrapeJobStatus.POSTS_SEEDED_FAILED
+                scrape_job.last_error = "Session died during pagination"
+                db.commit()
             raise RuntimeError("Session Dead")
         
         if not page_data or "items" not in page_data:
@@ -305,6 +368,13 @@ def seed_posts_for_user(db: Session, session: requests.Session, username: str):
             time.sleep(sleep_time)
 
     logger.info(f"Finished {username}. Total posts processed: {total_discovered}")
+    
+    # Update job status to POSTS_SEEDED on success
+    if scrape_job:
+        scrape_job.status = ScrapeJobStatus.POSTS_SEEDED
+        db.commit()
+        logger.info(f"Updated job {scrape_job.id} to POSTS_SEEDED")
+
 
 def run_worker():
     db = SessionLocal()
@@ -322,7 +392,18 @@ def run_worker():
     logger.info(f"Found {len(users)} users in DB to process.")
 
     for i, user in enumerate(users):
+        scrape_job = None
         try:
+            # Get the job before processing
+            scrape_job = (
+                db.query(ScrapeJob)
+                .filter(
+                    ScrapeJob.job_type == ScrapeJobType.PROFILE,
+                    ScrapeJob.entity_key == user.username
+                )
+                .first()
+            )
+            
             seed_posts_for_user(db, session, user.username)
 
         except RuntimeError as e:
@@ -337,6 +418,10 @@ def run_worker():
             logger.error(
                 f"Runtime error processing {user.username}: {e}"
             )
+            if scrape_job:
+                scrape_job.status = ScrapeJobStatus.POSTS_SEEDED_FAILED
+                scrape_job.last_error = str(e)
+                db.commit()
 
         except Exception as e:
             # Any DB / parsing / persistence error
@@ -345,6 +430,10 @@ def run_worker():
                 f"Unexpected error processing {user.username}: {e}"
             )
             traceback.print_exc()
+            if scrape_job:
+                scrape_job.status = ScrapeJobStatus.POSTS_SEEDED_FAILED
+                scrape_job.last_error = str(e)[:500]  # Truncate to avoid too long errors
+                db.commit()
 
         # Controlled pacing between users
         if i < len(users) - 1:
