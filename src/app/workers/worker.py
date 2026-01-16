@@ -78,7 +78,7 @@ def run_worker():
             logger.info("Picked job id=%s url=%s", job.id, job.entity_key)
 
             # mark RUNNING
-            job.status = ScrapeJobStatus.RUNNING
+            job.status = ScrapeJobStatus.USER_CREATION_RUNNING
             db.commit()
 
             # --- risky section ---
@@ -93,8 +93,8 @@ def run_worker():
             if username:
                 enqueue_profile_job(username, db)
 
-            # mark USER_SEEDED
-            job.status = ScrapeJobStatus.USER_SEEDED
+            # mark USER_SEEDED, needs analysis
+            job.status = ScrapeJobStatus.USER_CREATED
             db.commit()
 
             start_post += 1
@@ -103,7 +103,7 @@ def run_worker():
             db.rollback()
 
             if job:
-                job.status = ScrapeJobStatus.USER_SEEDED_FAILED
+                job.status = ScrapeJobStatus.USER_CREATION_FAILED 
                 job.last_error = str(e)
                 db.commit()
 

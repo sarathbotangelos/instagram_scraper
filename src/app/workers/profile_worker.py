@@ -6,7 +6,7 @@ from src.app.core.db.models import ScrapeJob, ScrapeJobStatus, ScrapeJobType, Sc
 from src.app.core.logging_config import logger
 import requests
 from src.app.instagram.client import build_authenticated_session
-from src.app.services.seeding_service import extract_contacts, process_user_links
+from src.app.services.extractors import process_user_links,extract_contacts
 
 
 def fetch_profile_webinfo(session: requests.Session, username: str) -> dict:
@@ -100,17 +100,17 @@ if __name__ == "__main__":
 
         logger.info("Picked job id=%s username=%s", job.id, job.entity_key)
 
-        job.status = ScrapeJobStatus.RUNNING
+        job.status = ScrapeJobStatus.USER_SEED_RUNNING
         db.commit()
 
         try:
             process_profile_job(job, db)
 
-            job.status = ScrapeJobStatus.DONE
+            job.status = ScrapeJobStatus.USER_SEEDED        
             db.commit()
 
         except Exception as e:
-            job.status = ScrapeJobStatus.FAILED
+            job.status = ScrapeJobStatus.USER_SEEDED_FAILED
             db.commit()
             logger.error(
                 "Job id=%s username=%s failed: %s",

@@ -31,16 +31,19 @@ class ScrapeJobSource(enum.Enum):
 
 class ScrapeJobStatus(enum.Enum):
     PENDING = 1
-    USER_SEED_RUNNING = 2
-    USER_SEEDED = 3
-    USER_SEEDED_FAILED = 4
-    POSTS_SEED_RUNNING = 5
-    POSTS_SEEDED = 6
-    POSTS_SEEDED_FAILED = 7
-    SCRAPE_DONE = 8
-    RATE_LIMITED = 9
-    FAILED = 10
-    DEAD = 11
+    USER_CREATED = 2
+    USER_CREATION_FAILED = 3
+    USER_CREATION_RUNNING = 4
+    USER_SEED_RUNNING = 5
+    USER_SEEDED = 6
+    USER_SEEDED_FAILED = 7
+    POSTS_SEED_RUNNING = 8
+    POSTS_SEEDED = 9
+    POSTS_SEEDED_FAILED = 10
+    SCRAPE_DONE = 11
+    RATE_LIMITED = 12
+    FAILED = 13
+    DEAD = 14
 
 
 class ScrapeJob(Base):

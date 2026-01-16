@@ -13,6 +13,7 @@ from src.app.core.db.models import User, PostsMetadata
 from src.app.core.db.session import SessionLocal
 from src.app.core.logging_config import logger
 from src.app.instagram.client import build_authenticated_session
+from src.app.services.extractors import extract_collaborators
 
 # Constants
 # We will use this module-level logger which is configured in logging_config
@@ -214,6 +215,10 @@ def parse_and_persist_items(db: Session, user_db_id: int, items: list) -> int:
             likes_count = item.get("like_count")
             comments_count = item.get("comment_count")
             views_count = item.get("view_count") or item.get("play_count") # view_count for vids
+
+
+            # Extract collaborators
+            collaborators_extracted = extract_collaborators(item)
             
             # Check existing
             post = db.query(PostsMetadata).filter_by(shortcode=shortcode).first()
@@ -223,6 +228,7 @@ def parse_and_persist_items(db: Session, user_db_id: int, items: list) -> int:
                     posted_by=user_db_id,
                     content_kind=content_kind,
                     is_container=is_container,
+                    collaborators=json.dumps(collaborators_extracted),
                     scraped_at=datetime.now(UTC),
                 )
                 db.add(post)
