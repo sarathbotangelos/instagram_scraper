@@ -12,11 +12,6 @@ class Settings(BaseSettings):
     DATABASE_PORT: int
     DATABASE_NAME: str
 
-    # Apify
-    APIFY_API_TOKEN: str
-    APIFY_INSTAGRAM_ACTOR: str = "apify/instagram-hashtag-scraper"
-    APIFY_BASE_URL: str = "https://api.apify.com/v2"
-
     # DeepSeek / OpenRouter
     DEEPSEEK_API_KEY: str
     DEEPSEEK_BASE_URL: str = "https://openrouter.ai/api/v1"
