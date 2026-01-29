@@ -12,77 +12,82 @@ def generate_search_queries(prompt: str) -> list[str]:
         base_url=settings.DEEPSEEK_BASE_URL,
     )
 
-    system_prompt = (
-        "You generate search queries for Google.\n"
-        "Return ONLY a JSON array of strings.\n"
-        "No explanation."
+    SYSTEM_PROMPT = (
+        "You generate Google search queries.\n"
+        "Output plain text only.\n"
+        "One query per line.\n"
+        "Do NOT use JSON.\n"
+        "Do NOT use Markdown.\n"
+        "Do NOT use code blocks.\n"
+        "Never return empty output."
     )
 
-    try:
+    def call_llm(user_prompt: str) -> str:
         response = client.chat.completions.create(
             model=settings.DEEPSEEK_MODEL,
             temperature=0,
+            max_tokens=256,
             messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt},
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
             ],
         )
 
-        content = response.choices[0].message.content
+        msg = response.choices[0].message
+        return (msg.content or "").strip()
+
+    try:
+        # ---------- FIRST ATTEMPT ----------
+        content = call_llm(prompt)
         logger.info("LLM raw output: %r", content)
 
-        if not content or not content.strip():
-            logger.warning("LLM returned empty content")
-            return []
+        # ---------- HARD CONTRACT VALIDATION ----------
+        if not content:
+            raise ValueError("LLM returned empty content")
 
-        # STEP 1: try strict JSON parse first
-        try:
-            parsed = json.loads(content)
-            logger.info("Strict JSON parse succeeded")
+        forbidden_tokens = ("```", "{", "}", "[", "]", "json")
+        if any(tok in content.lower() for tok in forbidden_tokens):
+            raise ValueError("LLM violated output contract")
 
-        except json.JSONDecodeError as e:
-            logger.warning("Strict JSON parse failed: %s", e)
+        queries = [line.strip() for line in content.splitlines() if line.strip()]
 
-            # STEP 2: fallback regex extraction
-            json_match = re.search(r'\[.*\]', content, re.DOTALL)
-            if not json_match:
-                logger.error("No JSON array found in LLM output")
-                return []
+        if not queries:
+            raise ValueError("No valid queries after parsing")
 
-            try:
-                parsed = json.loads(json_match.group())
-                logger.info("Regex JSON extraction succeeded")
-            except Exception as e:
-                logger.error("Regex JSON parse failed: %s", e)
-                return []
+        logger.info("Query generation successful: %d queries", len(queries))
+        return queries
 
-        # STEP 3: type validation
-        if not isinstance(parsed, list):
-            logger.error("Parsed JSON is not a list: %s", type(parsed))
-            return []
+    except Exception as first_error:
+        logger.warning("Primary LLM call failed: %s", first_error)
 
-        # STEP 4: element validation
-        final_queries = []
-        for i, q in enumerate(parsed):
-            if isinstance(q, str) and q.strip():
-                final_queries.append(q.strip())
-            else:
-                logger.warning(
-                    "Invalid query at index %d: %r (type=%s)",
-                    i, q, type(q)
-                )
-
-        if not final_queries:
-            logger.warning("Parsed list contained no valid string queries")
-            return []
-
-        logger.info(
-            "Query generation successful: %d queries",
-            len(final_queries)
+        # ---------- SINGLE DETERMINISTIC RETRY ----------
+        retry_prompt = (
+            "Generate 5 Google search queries.\n"
+            "Kerala wedding photographers."
         )
 
-        return final_queries
+        try:
+            content = call_llm(retry_prompt)
+            logger.info("LLM retry output: %r", content)
 
-    except Exception as e:
-        logger.exception("LLM query generation crashed")
-        return []
+            if not content:
+                raise ValueError("Retry returned empty content")
+
+            forbidden_tokens = ("```", "{", "}", "[", "]", "json")
+            if any(tok in content.lower() for tok in forbidden_tokens):
+                raise ValueError("Retry violated output contract")
+
+            queries = [line.strip() for line in content.splitlines() if line.strip()]
+
+            if not queries:
+                raise ValueError("Retry produced no valid queries")
+
+            logger.info(
+                "Query generation successful after retry: %d queries",
+                len(queries),
+            )
+            return queries
+
+        except Exception:
+            logger.exception("LLM query generation failed after retry")
+            return []
