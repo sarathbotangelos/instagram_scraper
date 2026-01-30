@@ -1,23 +1,56 @@
 
 import time
 import json
-import logging
+import random
 import requests
 import traceback
 from datetime import datetime, UTC
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Tuple
 
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError
 from src.app.core.db.models import User, PostsMetadata, ScrapeJob, ScrapeJobType, ScrapeJobStatus,PostMedia
 from src.app.core.db.session import SessionLocal
 from src.app.core.logging_config import logger
 from src.app.instagram.client import build_authenticated_session
+from src.app.services.email_service import send_alert_email
 from src.app.services.extractors import extract_collaborators, extract_media_items
 
 # Constants
 # We will use this module-level logger which is configured in logging_config
 # The user snippet used its own config, but we should adhere to project standards.
+
+# User agents list for rotation (realistic browser headers)
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
+]
+
+# Request headers template for realistic browser behavior
+def get_browser_headers() -> Dict[str, str]:
+    """Generate realistic browser headers with rotated User-Agent."""
+    return {
+        "User-Agent": random.choice(USER_AGENTS),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Cache-Control": "max-age=0",
+        "Referer": "https://www.instagram.com/",
+    }
+
+def get_random_delay(min_seconds: float = 45, max_seconds: float = 240) -> float:
+    """
+    Generate random delay with jitter to appear more human-like.
+    Range: 45-240 seconds (0.75-4 minutes) to simulate realistic browsing behavior.
+    """
+    return random.uniform(min_seconds, max_seconds)
 
 def get_csrf_token(session: requests.Session) -> Optional[str]:
     """
@@ -27,6 +60,33 @@ def get_csrf_token(session: requests.Session) -> Optional[str]:
         if cookie.name == "csrftoken":
             return cookie.value
     return None
+
+def refresh_csrf_token(session: requests.Session) -> bool:
+    """
+    Refresh CSRF token by visiting the main Instagram page.
+    This prevents CSRF token expiry issues during long scraping sessions.
+    Returns True if successful, False otherwise.
+    """
+    try:
+        logger.info("Attempting to refresh CSRF token...")
+        headers = get_browser_headers()
+        response = session.get("https://www.instagram.com/", headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            new_csrf = get_csrf_token(session)
+            if new_csrf:
+                logger.info(f"CSRF token refreshed successfully")
+                return True
+            else:
+                logger.warning("CSRF token not found after refresh attempt")
+                return False
+        else:
+            logger.warning(f"Failed to refresh CSRF token (status: {response.status_code})")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Exception during CSRF token refresh: {e}")
+        return False
 
 def resolve_profile_id_graphql(session: requests.Session, username: str) -> Tuple[Optional[str], str]:
     """
@@ -39,8 +99,13 @@ def resolve_profile_id_graphql(session: requests.Session, username: str) -> Tupl
         "variables": json.dumps({"username": username})
     }
     
+    headers = get_browser_headers()
+    csrf = get_csrf_token(session)
+    if csrf:
+        headers["X-CSRFToken"] = csrf
+    
     try:
-        response = session.get(url, params=params, timeout=10)
+        response = session.get(url, params=params, headers=headers, timeout=10)
         logger.info(f"GraphQL Fallback status: {response.status_code}")
         
         if response.status_code == 200:
@@ -68,8 +133,10 @@ def resolve_profile_id_search(session: requests.Session, username: str) -> Tuple
     logger.info(f"Trying Search fallback for: {username}")
     url = f"https://www.instagram.com/web/search/topsearch/?context=blended&query={username}&rank_token=0.1"
     
+    headers = get_browser_headers()
+    
     try:
-        response = session.get(url, timeout=10)
+        response = session.get(url, headers=headers, timeout=10)
         logger.info(f"Search Fallback status: {response.status_code}")
         
         if response.status_code == 200:
@@ -93,15 +160,16 @@ def resolve_profile_id(session: requests.Session, username: str) -> Tuple[Option
     logger.info(f"Resolving profile ID for: {username}")
     url = f"https://www.instagram.com/{username}/?__a=1&__d=dis"
     
+    # Get realistic headers
+    headers = get_browser_headers()
+    
     # Ensure CSRF token is in headers if present in cookies
     csrf = get_csrf_token(session)
     if csrf:
-        session.headers.update({"X-CSRFToken": csrf})
-    
-    session.headers.update({"Referer": "https://www.instagram.com/"})
+        headers["X-CSRFToken"] = csrf
     
     try:
-        response = session.get(url, allow_redirects=False, timeout=10)
+        response = session.get(url, headers=headers, allow_redirects=False, timeout=10)
         logger.info(f"Resolution status: {response.status_code}")
         
         if response.status_code == 200:
@@ -136,9 +204,10 @@ def resolve_profile_id(session: requests.Session, username: str) -> Tuple[Option
     logger.error(f"All resolution methods failed for {username}")
     return None, "empty_data"
 
-def fetch_posts_page(session: requests.Session, profile_id: str, cursor: str = None) -> Tuple[Optional[Dict], str]:
+def fetch_posts_page(session: requests.Session, profile_id: str, cursor: str = None, retry_count: int = 0) -> Tuple[Optional[Dict], str]:
     """
     Using the stable REST API: GET https://www.instagram.com/api/v1/feed/user/{profile_id}/
+    With retry logic for transient failures.
     """
     url = f"https://www.instagram.com/api/v1/feed/user/{profile_id}/"
     params = {
@@ -146,15 +215,32 @@ def fetch_posts_page(session: requests.Session, profile_id: str, cursor: str = N
     }
     if cursor:
         params["max_id"] = cursor
+    
+    # Get fresh headers for each request
+    headers = get_browser_headers()
+    csrf = get_csrf_token(session)
+    if csrf:
+        headers["X-CSRFToken"] = csrf
         
     logger.info(f"Fetching posts for ID {profile_id} (cursor: {cursor})")
     
     try:
-        response = session.get(url, params=params, timeout=15)
-        # logger.info(f"REST request status: {response.status_code}")
+        response = session.get(url, params=params, headers=headers, timeout=15)
         
         if response.status_code in [401, 403]:
+            logger.warning(f"Authentication error ({response.status_code}). Session may be dead.")
             return None, "session_dead"
+        
+        if response.status_code == 429:
+            logger.warning("Rate limited (429). Too many requests.")
+            return None, "rate_limited"
+        
+        if response.status_code >= 500:
+            logger.warning(f"Server error ({response.status_code}). Retrying...")
+            if retry_count < 2:
+                time.sleep(random.uniform(5, 10))  # Brief backoff for server errors
+                return fetch_posts_page(session, profile_id, cursor, retry_count + 1)
+            return None, "server_error"
         
         res_json = response.json()
         if res_json.get("status") == "fail":
@@ -166,9 +252,23 @@ def fetch_posts_page(session: requests.Session, profile_id: str, cursor: str = N
             return None, "error"
             
         return res_json, "active"
+        
+    except requests.exceptions.Timeout:
+        logger.warning("Request timeout. Retrying...")
+        if retry_count < 2:
+            time.sleep(random.uniform(5, 10))
+            return fetch_posts_page(session, profile_id, cursor, retry_count + 1)
+        return None, "timeout"
+        
+    except requests.exceptions.ConnectionError:
+        logger.warning("Connection error. Retrying...")
+        if retry_count < 2:
+            time.sleep(random.uniform(5, 10))
+            return fetch_posts_page(session, profile_id, cursor, retry_count + 1)
+        return None, "connection_error"
+        
     except Exception as e:
         logger.error(f"Failed to parse REST response: {e}")
-        # logger.info(f"Raw response preview: {response.text[:500]}")
         return None, "empty_data"
 
 def parse_and_persist_items(db: Session, user_db_id: int, items: list) -> int:
@@ -306,7 +406,13 @@ def seed_posts_for_user(db: Session, session: requests.Session, username: str):
     # Resolve IG PK
     profile_id, status = resolve_profile_id(session, username)
     if status == "session_dead":
-        logger.critical("Session appears dead. Stopping worker.")
+        error_msg = f"Session died during profile ID resolution for user: {username}"
+        logger.critical(error_msg)
+        send_alert_email(
+            subject="Session Dead - Profile ID Resolution",
+            body=f"<strong>Username:</strong> {username}<br><strong>Error:</strong> {error_msg}",
+            error_details="Session became invalid while attempting to resolve Instagram profile ID. May need to re-authenticate."
+        )
         if scrape_job:
             scrape_job.status = ScrapeJobStatus.POSTS_SEEDED_FAILED
             scrape_job.last_error = "Session dead during profile ID resolution"
@@ -336,17 +442,30 @@ def seed_posts_for_user(db: Session, session: requests.Session, username: str):
     has_next_page = True
     total_discovered = 0
     page_num = 1
+    pages_processed = 0
     
     while has_next_page:
         page_data, status = fetch_posts_page(session, profile_id, cursor)
         
         if status == "session_dead":
-            logger.critical(f"Session died during pagination user={username}")
+            error_msg = f"Session died during pagination for user: {username}"
+            logger.critical(error_msg)
+            send_alert_email(
+                subject="Session Dead - Posts Pagination",
+                body=f"<strong>Username:</strong> {username}<br><strong>Page:</strong> {page_num}<br><strong>Total Posts Discovered:</strong> {total_discovered}<br><strong>Error:</strong> {error_msg}",
+                error_details=f"Session became invalid while paginating through posts. Progress was lost at page {page_num} with {total_discovered} posts already discovered."
+            )
             if scrape_job:
                 scrape_job.status = ScrapeJobStatus.POSTS_SEEDED_FAILED
                 scrape_job.last_error = "Session died during pagination"
                 db.commit()
             raise RuntimeError("Session Dead")
+        
+        if status == "rate_limited":
+            logger.warning(f"Rate limited while scraping {username}. Backing off for 60 seconds...")
+            time.sleep(60)
+            # Retry the current page
+            continue
         
         if not page_data or "items" not in page_data:
             logger.warning(f"No items or error for {username} page {page_num}. Ending.")
@@ -361,11 +480,18 @@ def seed_posts_for_user(db: Session, session: requests.Session, username: str):
         has_next_page = page_data.get("more_available", False)
         cursor = page_data.get("next_max_id")
         page_num += 1
+        pages_processed += 1
         
         if has_next_page:
-            sleep_time = 12
-            logger.info(f"Sleeping {sleep_time}s before next page...")
+            # Adaptive delay: longer between pages to avoid detection
+            sleep_time = get_random_delay(min_seconds=25, max_seconds=45)
+            logger.info(f"Sleeping {sleep_time:.1f}s before next page...")
             time.sleep(sleep_time)
+            
+            # Refresh CSRF token every 5 pages to prevent expiry
+            if pages_processed % 5 == 0:
+                logger.info("Refreshing CSRF token as precaution...")
+                refresh_csrf_token(session)
 
     logger.info(f"Finished {username}. Total posts processed: {total_discovered}")
     
@@ -374,6 +500,9 @@ def seed_posts_for_user(db: Session, session: requests.Session, username: str):
         scrape_job.status = ScrapeJobStatus.POSTS_SEEDED
         db.commit()
         logger.info(f"Updated job {scrape_job.id} to POSTS_SEEDED")
+
+
+
 
 
 def run_worker():
@@ -424,8 +553,12 @@ def run_worker():
             # Hard stop condition (checkpoint / login required)
             db.rollback()
             if "Session Dead" in str(e):
-                logger.critical(
-                    "Session marked dead. Stopping GraphQL worker immediately."
+                error_msg = "Session marked dead. Stopping Instagram scraper worker immediately."
+                logger.critical(error_msg)
+                send_alert_email(
+                    subject="Worker Stopped - Session Dead",
+                    body=f"<strong>Current User:</strong> {user.username}<br><strong>Error:</strong> {error_msg}",
+                    error_details="The authenticated Instagram session has died and cannot continue. The worker has stopped to prevent further failures. Manual re-authentication may be required."
                 )
                 break
 
@@ -449,10 +582,10 @@ def run_worker():
                 scrape_job.last_error = str(e)[:500]  # Truncate to avoid too long errors
                 db.commit()
 
-        # Controlled pacing between users
+        # Controlled pacing between users (longer delay between different users)
         if i < len(users) - 1:
-            sleep_time = 5
-            logger.info(f"Sleeping {sleep_time}s before next user...")
+            sleep_time = get_random_delay(min_seconds=60, max_seconds=180)  # Longer delay between users: 1-3 minutes
+            logger.info(f"Sleeping {sleep_time:.1f}s before next user...")
             time.sleep(sleep_time)
 
     db.close()
