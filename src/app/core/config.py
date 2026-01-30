@@ -21,12 +21,12 @@ class Settings(BaseSettings):
     GOOGLE_API_KEY : str
     GOOGLE_CSE_ID : str
 
-    # User Agent
-    USER_AGENT: str = (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
-    )
+    # Email
+    EMAIL_SERVER: str
+    EMAIL_PORT: int
+    EMAIL_SENDER: str
+    EMAIL_PASSWORD: str
+    EMAIL_RECIPIENT: str
 
     # Logging
     LOG_LEVEL: str = "INFO"
