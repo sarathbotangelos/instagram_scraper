@@ -24,12 +24,16 @@ def run_discovery(prompt: str, db: Session) -> None:
 
     discovered_urls: set[str] = set()
 
+    # for query in queries:
+    #     urls = google_search_instagram_posts(query, limit=20)
+    #     for url in urls:
+    #         # keep only posts/reels
+    #         if "/p/" in url or "/reel/" in url:
+    #             discovered_urls.add(url.split("?")[0])
+
     for query in queries:
-        urls = google_search_instagram_posts(query, limit=20)
-        for url in urls:
-            # keep only posts/reels
-            if "/p/" in url or "/reel/" in url:
-                discovered_urls.add(url.split("?")[0])
+        urls = google_search_instagram_posts(query, limit=30)
+        discovered_urls.update(url.split("?")[0] for url in urls)
 
     if not discovered_urls:
         logger.info("No post URLs discovered")
